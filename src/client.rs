@@ -1,4 +1,7 @@
-use reqwest::{Client as HttpClient, ClientBuilder as HttpCLientBuilder, Error as RequestError};
+use reqwest::{
+    blocking::Client as HttpClient, blocking::ClientBuilder as HttpCLientBuilder,
+    Error as RequestError,
+};
 use serde::de::DeserializeOwned;
 use std::{result, time::Duration};
 use thiserror::Error;
@@ -20,12 +23,12 @@ pub struct Client {
 }
 
 impl Client {
-    pub async fn get<T: DeserializeOwned>(&self, url: &str) -> ClientResult<T> {
-        let res = self.inner.get(url).send().await?;
+    pub fn get<T: DeserializeOwned>(&self, url: &str) -> ClientResult<T> {
+        let res = self.inner.get(url).send()?;
         if let Err(error) = res.error_for_status_ref() {
             return Err(error.into());
         }
-        Ok(res.json::<T>().await?)
+        Ok(res.json::<T>()?)
     }
 }
 
@@ -41,8 +44,7 @@ impl ClientBuilder {
         Self {
             inner: HttpCLientBuilder::new()
                 .timeout(Duration::from_secs(CLIENT_TIMEOUT))
-                .connect_timeout(Duration::from_secs(CLIENT_CONNECTION_TIMEOUT)),
-            // set other client options here..
+                .connect_timeout(Duration::from_secs(CLIENT_CONNECTION_TIMEOUT)), // set other client options here..
         }
     }
 
@@ -58,26 +60,13 @@ mod tests {
     use super::ClientBuilder;
     use serde::Deserialize;
     #[derive(Debug, Deserialize)]
-    struct Crate {
-        description: String,
+    struct Response {
+        url: String,
     }
-
-    #[derive(Debug, Deserialize)]
-    struct Crates {
-        #[serde(alias = "crate")]
-        crate_: Crate,
-    }
-
-    #[tokio::test]
-    async fn client_get() {
+    #[test]
+    fn client_get() {
         let client = ClientBuilder::new().build().unwrap();
-        let crates = client
-            .get::<Crates>("https://crates.io/api/v1/crates/reqwest")
-            .await
-            .unwrap();
-        assert_eq!(
-            crates.crate_.description,
-            "Crates to make HTTP network requests.".to_string()
-        )
+        let resp = client.get::<Response>("http://httpbin.org/get").unwrap();
+        assert_eq!(resp.url, "http://httpbin.org/get".to_string())
     }
 }
